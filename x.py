@@ -1,6 +1,6 @@
 import os
 import logging
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 import firebase_admin
 from firebase_admin import credentials, firestore
 from dotenv import load_dotenv
