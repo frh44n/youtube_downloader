@@ -1,89 +1,52 @@
 import os
 import logging
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
-from pytube import YouTube
+from flask import Flask, request, jsonify
+from dotenv import load_dotenv
+from telegram import Update, Bot
+from telegram.ext import Dispatcher, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 
-# Enable logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
+load_dotenv()
 
-# Telegram bot token (replace with your bot token)
-BOT_TOKEN = os.getenv('BOT_TOKEN')
+# Telegram bot token from environment variable
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+# Set webhook URL path
+WEBHOOK_URL_PATH = "/webhook"
 
-# Define the available video formats
-VIDEO_FORMATS = {
-    '480p': 'medium',
-    '720p': '720p',
-    '1080p': '1080p',
-    '2K': '1440p',
-}
+app = Flask(__name__)
+bot = Bot(token=BOT_TOKEN)
+dispatcher = Dispatcher(bot, None, workers=0)
 
-# Handler function for /start command
-def start(update: Update, context: CallbackContext) -> None:
-    user = update.effective_user
-    update.message.reply_text(
-        f"Hello {user.first_name}! I'm a YouTube video downloader bot. Just send me the YouTube video URL and I'll provide you with download options."
-    )
+# Bot command functions
+def start(update, context):
+    context.bot.send_message(chat_id=update.effective_chat.id, text="Welcome! Send me a YouTube video link to download.")
 
-# Handler function for processing YouTube video download requests
-def download_video(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    query.answer()
-    video_url = query.data
+def download_video(update, context):
+    if not context.args:
+        update.message.reply_text("Please provide a YouTube video link.")
+        return
 
-    keyboard = []
+    video_link = context.args[0]
+    # Implement your YouTube video downloading logic here
+    # Example: Download the video and send it back to the user
+    # Replace with your actual downloading logic
+    update.message.reply_text(f"Downloading video from {video_link}...")
 
-    for format_name, resolution in VIDEO_FORMATS.items():
-        video = YouTube(video_url)
-        stream = video.streams.filter(res=resolution).first()
+def webhook(request):
+    if request.method == "POST":
+        update = Update.de_json(request.get_json(force=True), bot)
+        dispatcher.process_update(update)
+    return "ok"
 
-        if stream:
-            keyboard.append([InlineKeyboardButton(format_name, callback_data=f'download_{resolution}')])
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    context.bot.send_message(
-        chat_id=query.message.chat_id,
-        text="Choose a format to download:",
-        reply_markup=reply_markup
-    )
-
-# Handler function for processing download format selection
-def process_download(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    query.answer()
-
-    resolution = query.data.split('_')[1]
-
-    video = YouTube(query.message.reply_to_message.text)
-    stream = video.streams.filter(res=resolution).first()
-
-    if stream:
-        stream.download(filename=f'{video.title}.mp4')
-        context.bot.send_document(
-            chat_id=query.message.chat_id,
-            document=open(f'{video.title}.mp4', 'rb'),
-            caption=f'Download complete for {resolution}',
-        )
-        os.remove(f'{video.title}.mp4')
-    else:
-        context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=f'Format {resolution} not available for this video.'
-        )
-
-# Main function to start the bot
 def main():
-    updater = Updater(BOT_TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
+    # Set webhook
+    bot.set_webhook(f"https://{os.getenv('APP_NAME')}.herokuapp.com{WEBHOOK_URL_PATH}")
 
+    # Add handlers for commands
     dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CallbackQueryHandler(download_video, pattern=r'^https://www.youtube.com/'))
-    dispatcher.add_handler(CallbackQueryHandler(process_download, pattern=r'^download_'))
+    dispatcher.add_handler(CommandHandler("download", download_video, pass_args=True))
 
-    updater.start_polling()
-    updater.idle()
+    # Start the Flask web server
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
