@@ -1,7 +1,6 @@
 import os
 import logging
-import firebase_admin
-from firebase_admin import credentials, firestore
+from pymongo import MongoClient
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 
@@ -10,12 +9,13 @@ logging.basicConfig(level=logging.INFO)
 # Environment variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = os.environ.get("ADMIN_ID")
+MONGO_URI = os.environ.get("MONGO_URI")
+DB_NAME = os.environ.get("DB_NAME")
 
-# Initialize Firebase app using the service account key from the environment variable
-cred = credentials.Certificate(os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'))
-firebase_admin.initialize_app(cred)
-
-db = firestore.client()
+# Initialize MongoDB client
+client = MongoClient(MONGO_URI)
+db = client[DB_NAME]
+subscribers_collection = db['subscribers']
 
 # Bot command functions
 def start(update, context):
@@ -26,19 +26,18 @@ def subscribe(update, context):
     query = update.callback_query
     user_id = query.from_user.id
 
-    doc_ref = db.collection('subscribers').document(str(user_id))
-    if doc_ref.get().exists:
+    if subscribers_collection.find_one({"user_id": user_id}):
         query.answer("User is already subscribed.")
     else:
-        doc_ref.set({'subscribed': True})
+        subscribers_collection.insert_one({"user_id": user_id})
         query.answer("Successfully Subscribed!")
 
 def broadcast(update, context):
     if update.effective_user.id == int(ADMIN_ID):
         message = update.message.text.split(" ", 1)[1]
-        docs = db.collection('subscribers').stream()
-        for doc in docs:
-            subscriber_id = doc.id
+        subscribers = subscribers_collection.find()
+        for subscriber in subscribers:
+            subscriber_id = subscriber['user_id']
             try:
                 context.bot.send_message(chat_id=subscriber_id, text=message)
             except Exception as e:
@@ -48,7 +47,7 @@ def broadcast(update, context):
 
 def subscribers(update, context):
     if update.effective_user.id == int(ADMIN_ID):
-        total_subscribers = len(list(db.collection('subscribers').stream()))
+        total_subscribers = subscribers_collection.count_documents({})
         update.message.reply_text(f"Total subscribers: {total_subscribers}")
     else:
         update.message.reply_text("Only the admin can check subscribers.")
