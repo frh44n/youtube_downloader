@@ -3,6 +3,7 @@ import logging
 from pymongo import MongoClient
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
+from flask import Flask, request, jsonify
 
 logging.basicConfig(level=logging.INFO)
 
@@ -11,16 +12,20 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = os.environ.get("ADMIN_ID")
 MONGO_URI = os.environ.get("MONGO_URI")
 DB_NAME = os.environ.get("DB_NAME")
+PORT = int(os.environ.get("PORT", 5000))
 
 # Initialize MongoDB client
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 subscribers_collection = db['subscribers']
 
+# Initialize Flask app
+app = Flask(__name__)
+
 # Bot command functions
 def start(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text="Best bot for Videos 🔥 🔥.")
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Press Subscribe to start recieving of videos daily", reply_markup={"inline_keyboard": [[{"text": "Subscribe", "callback_data": "subscribe"}]]})
+    context.bot.send_message(chat_id=update.effective_chat.id, text="Press Subscribe to start receiving videos daily", reply_markup={"inline_keyboard": [[{"text": "Subscribe", "callback_data": "subscribe"}]]})
 
 def subscribe(update, context):
     query = update.callback_query
@@ -52,8 +57,16 @@ def subscribers(update, context):
     else:
         update.message.reply_text("Only the admin can check subscribers.")
 
+# Webhook endpoint
+@app.route(f'/{BOT_TOKEN}', methods=['POST'])
+def webhook():
+    update = Update.de_json(request.json, context.bot)
+    dispatcher.process_update(update)
+    return jsonify({'status': 'ok'})
+
 def main():
     updater = Updater(BOT_TOKEN, use_context=True)
+    global dispatcher
     dispatcher = updater.dispatcher
 
     # Add handlers for commands
@@ -64,9 +77,14 @@ def main():
     # Add handler for inline button clicks
     dispatcher.add_handler(CallbackQueryHandler(subscribe))
 
-    # Start the bot
-    updater.start_polling()
-    updater.idle()
+    # Start the webhook
+    updater.start_webhook(listen="0.0.0.0",
+                          port=PORT,
+                          url_path=BOT_TOKEN,
+                          webhook_url=f"https://your-app-name.herokuapp.com/{BOT_TOKEN}")
+
+    # Run Flask app
+    app.run(host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     main()
