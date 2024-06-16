@@ -81,7 +81,7 @@ def main():
     updater.start_webhook(listen="0.0.0.0",
                           port=PORT,
                           url_path=BOT_TOKEN,
-                          webhook_url=f"https://your-app-name.herokuapp.com/{BOT_TOKEN}")
+                          webhook_url=f"https://x-py.onrender.com/{BOT_TOKEN}")
 
     # Run Flask app
     app.run(host='0.0.0.0', port=PORT)
