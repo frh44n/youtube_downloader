@@ -19,8 +19,8 @@ subscribers_collection = db['subscribers']
 
 # Bot command functions
 def start(update, context):
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Hello! I'm a bot. You can subscribe to me by clicking the button below.")
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Subscribe", reply_markup={"inline_keyboard": [[{"text": "Subscribe", "callback_data": "subscribe"}]]})
+    context.bot.send_message(chat_id=update.effective_chat.id, text="Best bot for Videos 🔥 🔥.")
+    context.bot.send_message(chat_id=update.effective_chat.id, text="Press Subscribe to start recieving of videos daily", reply_markup={"inline_keyboard": [[{"text": "Subscribe", "callback_data": "subscribe"}]]})
 
 def subscribe(update, context):
     query = update.callback_query
