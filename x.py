@@ -1,107 +1,89 @@
 import os
 import logging
-import mysql.connector
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
-from flask import Flask, request, jsonify
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
+from pytube import YouTube
 
-logging.basicConfig(level=logging.INFO)
+# Enable logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
 
-# Initialize Flask app
-app = Flask(__name__)
+# Telegram bot token (replace with your bot token)
+BOT_TOKEN = os.getenv('BOT_TOKEN')
 
-# Environment variables
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = int(os.environ.get("ADMIN_ID"))
-MYSQL_HOST = os.environ.get("MYSQL_HOST")
-MYSQL_USER = os.environ.get("MYSQL_USER")
-MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD")
-MYSQL_DATABASE = os.environ.get("MYSQL_DATABASE")
-WEBHOOK_URL_PATH = os.environ.get("WEBHOOK_URL_PATH", "/")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL") + WEBHOOK_URL_PATH
+# Define the available video formats
+VIDEO_FORMATS = {
+    '480p': 'medium',
+    '720p': '720p',
+    '1080p': '1080p',
+    '2K': '1440p',
+}
 
-# Initialize MySQL connection
-mysql_conn = mysql.connector.connect(
-    host=MYSQL_HOST,
-    user=MYSQL_USER,
-    password=MYSQL_PASSWORD,
-    database=MYSQL_DATABASE
-)
-mysql_cursor = mysql_conn.cursor()
+# Handler function for /start command
+def start(update: Update, context: CallbackContext) -> None:
+    user = update.effective_user
+    update.message.reply_text(
+        f"Hello {user.first_name}! I'm a YouTube video downloader bot. Just send me the YouTube video URL and I'll provide you with download options."
+    )
 
-# Bot command functions
-def start(update, context):
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Best bot for Videos 🔥 🔥.")
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Press Subscribe to start receiving videos daily", reply_markup={"inline_keyboard": [[{"text": "Subscribe", "callback_data": "subscribe"}]]})
-
-def subscribe(update, context):
+# Handler function for processing YouTube video download requests
+def download_video(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
-    user_id = query.from_user.id
+    query.answer()
+    video_url = query.data
 
-    # Check if user is already subscribed
-    mysql_cursor.execute("SELECT * FROM subscribers WHERE user_id = %s", (user_id,))
-    if mysql_cursor.fetchone():
-        query.answer("User is already subscribed.")
+    keyboard = []
+
+    for format_name, resolution in VIDEO_FORMATS.items():
+        video = YouTube(video_url)
+        stream = video.streams.filter(res=resolution).first()
+
+        if stream:
+            keyboard.append([InlineKeyboardButton(format_name, callback_data=f'download_{resolution}')])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="Choose a format to download:",
+        reply_markup=reply_markup
+    )
+
+# Handler function for processing download format selection
+def process_download(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    query.answer()
+
+    resolution = query.data.split('_')[1]
+
+    video = YouTube(query.message.reply_to_message.text)
+    stream = video.streams.filter(res=resolution).first()
+
+    if stream:
+        stream.download(filename=f'{video.title}.mp4')
+        context.bot.send_document(
+            chat_id=query.message.chat_id,
+            document=open(f'{video.title}.mp4', 'rb'),
+            caption=f'Download complete for {resolution}',
+        )
+        os.remove(f'{video.title}.mp4')
     else:
-        # Insert user into database
-        mysql_cursor.execute("INSERT INTO subscribers (user_id) VALUES (%s)", (user_id,))
-        mysql_conn.commit()
-        query.answer("Successfully Subscribed!")
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f'Format {resolution} not available for this video.'
+        )
 
-def broadcast(update, context):
-    if update.effective_user.id == ADMIN_ID:
-        message = update.message.text.split(" ", 1)[1]
-        mysql_cursor.execute("SELECT user_id FROM subscribers")
-        subscribers = mysql_cursor.fetchall()
-        for subscriber in subscribers:
-            subscriber_id = subscriber[0]
-            try:
-                context.bot.send_message(chat_id=subscriber_id, text=message)
-            except Exception as e:
-                logging.error(f"Error sending message to {subscriber_id}: {e}")
-    else:
-        update.message.reply_text("Only the admin can send broadcasts.")
-
-def subscribers(update, context):
-    if update.effective_user.id == ADMIN_ID:
-        mysql_cursor.execute("SELECT COUNT(*) FROM subscribers")
-        total_subscribers = mysql_cursor.fetchone()[0]
-        update.message.reply_text(f"Total subscribers: {total_subscribers}")
-    else:
-        update.message.reply_text("Only the admin can check subscribers.")
-
-# Webhook handler
-@app.route(WEBHOOK_URL_PATH + BOT_TOKEN, methods=['POST'])
-def webhook():
-    update = Update.de_json(request.json, context.bot)
-    dispatcher.process_update(update)
-    return 'ok'
-
+# Main function to start the bot
 def main():
-    global dispatcher
-
-    # Create Telegram bot updater
     updater = Updater(BOT_TOKEN, use_context=True)
-
-    # Get the dispatcher to register handlers
     dispatcher = updater.dispatcher
 
-    # Register handlers for commands
     dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("broadcast", broadcast))
-    dispatcher.add_handler(CommandHandler("subscribers", subscribers))
+    dispatcher.add_handler(CallbackQueryHandler(download_video, pattern=r'^https://www.youtube.com/'))
+    dispatcher.add_handler(CallbackQueryHandler(process_download, pattern=r'^download_'))
 
-    # Register handler for inline button clicks
-    dispatcher.add_handler(CallbackQueryHandler(subscribe))
+    updater.start_polling()
+    updater.idle()
 
-    # Start the webhook
-    updater.start_webhook(listen="https://x-py.onrender.com/7087313333:AAEi0ia4wp2zekJLxY-NIILGYyNvuruJKUE",
-                          port=int(os.environ.get('PORT', 5000)),
-                          url_path=BOT_TOKEN)
-    updater.bot.set_webhook(WEBHOOK_URL + BOT_TOKEN)
-
-    # Start the Flask web server
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
