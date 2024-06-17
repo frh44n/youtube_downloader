@@ -1,15 +1,14 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler, CallbackContext
 from pytube import YouTube
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
 load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 PORT = int(os.getenv('PORT', '5000'))
-WEBHOOK_URL = os.getenv('WEBHOOK_URL')
+WEBHOOK_URL = os.getenv('WEBHOOK_URL')  # Ensure this is correctly set in your Render environment
 
 def start(update: Update, context: CallbackContext) -> None:
     user_first_name = update.effective_user.first_name
@@ -81,10 +80,12 @@ def main() -> None:
     dispatcher.add_handler(CallbackQueryHandler(button))
 
     # Set up webhook
-    updater.start_webhook(listen="0.0.0.0",
+    updater.start_webhook(listen="0.0.0.0",  # Listen on all available interfaces
                           port=PORT,
                           url_path=BOT_TOKEN)
-    updater.bot.set_webhook(WEBHOOK_URL)
+    
+    # Set the webhook URL provided by Render
+    updater.bot.set_webhook(WEBHOOK_URL + BOT_TOKEN)
 
     updater.idle()
 
