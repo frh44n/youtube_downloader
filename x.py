@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler, CallbackContext
 from pytube import YouTube
 import os
@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-PORT = int(os.getenv('PORT', '5000'))
-WEBHOOK_URL = os.getenv('WEBHOOK_URL')  # Ensure this is correctly set in your Render environment
+PORT = int(os.getenv('PORT', '8443'))
+WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 
 def start(update: Update, context: CallbackContext) -> None:
     user_first_name = update.effective_user.first_name
@@ -71,7 +71,7 @@ def button(update: Update, context: CallbackContext) -> None:
         query.edit_message_text(text=f"An error occurred: {str(e)}")
 
 def main() -> None:
-    updater = Updater(BOT_TOKEN)
+    updater = Updater(BOT_TOKEN, use_context=True)
 
     dispatcher = updater.dispatcher
 
@@ -80,12 +80,10 @@ def main() -> None:
     dispatcher.add_handler(CallbackQueryHandler(button))
 
     # Set up webhook
-    updater.start_webhook(listen="0.0.0.0",  # Listen on all available interfaces
+    updater.start_webhook(listen="0.0.0.0",
                           port=PORT,
-                          url_path=BOT_TOKEN)
-    
-    # Set the webhook URL provided by Render
-    updater.bot.set_webhook(WEBHOOK_URL + BOT_TOKEN)
+                          url_path=BOT_TOKEN,
+                          webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
 
     updater.idle()
 
