@@ -25,13 +25,10 @@ def handle_link(update: Update, context: CallbackContext) -> None:
 
     keyboard = [
         [
-            InlineKeyboardButton("480p", callback_data='480p'),
-            InlineKeyboardButton("720p", callback_data='720p'),
+            InlineKeyboardButton("HD QUALITY", callback_data='480p'),
+            
         ],
-        [
-            InlineKeyboardButton("1080p", callback_data='1080p'),
-            InlineKeyboardButton("MP3", callback_data='mp3'),
-        ],
+        
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
