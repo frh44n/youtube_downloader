@@ -2,6 +2,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler, CallbackContext
 from pytube import YouTube
 import os
+import subprocess
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,44 +27,44 @@ def handle_link(update: Update, context: CallbackContext) -> None:
     keyboard = [
         [
             InlineKeyboardButton("HD QUALITY", callback_data='480p'),
-            
         ],
-        
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text('Select video format:', reply_markup=reply_markup)
 
+def download_and_merge_video_audio(url, resolution):
+    yt = YouTube(url)
+    video_stream = yt.streams.filter(res=resolution, mime_type="video/mp4").first()
+    audio_stream = yt.streams.filter(only_audio=True, mime_type="audio/mp4").first()
+
+    video_file = video_stream.download(filename='video.mp4')
+    audio_file = audio_stream.download(filename='audio.mp4')
+
+    output_file = 'output.mp4'
+    cmd = [
+        'ffmpeg', '-i', video_file, '-i', audio_file, '-c:v', 'copy', '-c:a', 'aac', '-strict', 'experimental', output_file
+    ]
+    subprocess.run(cmd)
+
+    os.remove(video_file)
+    os.remove(audio_file)
+
+    return output_file
+
 def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     query.answer()
 
-    format = query.data
+    resolution = query.data
     url = context.user_data['url']
-    query.edit_message_text(text=f"Please wait: Downloading {format} format")
+    query.edit_message_text(text=f"Please wait: Downloading {resolution} format")
 
     try:
-        yt = YouTube(url)
-        if format == 'mp3':
-            stream = yt.streams.filter(only_audio=True).first()
-            file_path = stream.download()
-            base, ext = os.path.splitext(file_path)
-            new_file = base + '.mp3'
-            os.rename(file_path, new_file)
-        else:
-            stream = yt.streams.filter(res=format).first()
-            stream.download()
-
+        video_file = download_and_merge_video_audio(url, resolution)
         query.edit_message_text(text="Download completed. Sending the file...")
-
-        if format == 'mp3':
-            context.bot.send_audio(chat_id=query.message.chat_id, audio=open(new_file, 'rb'))
-            os.remove(new_file)
-        else:
-            video_file = stream.default_filename
-            context.bot.send_video(chat_id=query.message.chat_id, video=open(video_file, 'rb'))
-            os.remove(video_file)
-
+        context.bot.send_video(chat_id=query.message.chat_id, video=open(video_file, 'rb'))
+        os.remove(video_file)
     except Exception as e:
         query.edit_message_text(text=f"An error occurred: {str(e)}")
 
