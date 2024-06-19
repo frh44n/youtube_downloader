@@ -26,7 +26,7 @@ def handle_link(update: Update, context: CallbackContext) -> None:
 
     keyboard = [
         [
-            InlineKeyboardButton("HD QUALITY", callback_data='480p'),
+            InlineKeyboardButton("HD QUALITY", callback_data='720p'),
         ],
     ]
 
